@@ -3,33 +3,51 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
+const path = require('path');
 const cors = require('cors');
+const hbs = require('hbs');
 const socketIo = require('socket.io');
-const authRoutes = require('./routes/authRoutes'); // Importa as rotas de autenticação
+const authRoutes = require('./routes/authRoutes');
 const socketHandler = require('./socket/socketHandler');
+const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: '*' } });
 
+// config
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-// Usando as rotas de autenticação
-app.use('/api/auth', authRoutes);
+// View engine
+app.set('view engine', 'hbs');
+app.set('views', path.join(__dirname, 'views'));
+hbs.registerPartials(path.join(__dirname, 'views/layouts'));
 
-// Rota raiz personalizada
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Rotas 
+app.use('/auth', authRoutes);
+
 app.get('/', (req, res) => {
-    res.send("Bem-vindo ao server!");
+  res.render('login');
 });
 
-// Conectando ao Banco de Dados
+// Página de chat (com autenticação)
+app.get('/chat', authMiddleware, (req, res) => {
+  res.render('chat', { user: req.user });
+});
+
+
+socketHandler(io);
+
+// Conexão com MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB conectado');
-    socketHandler(io); // Configura o socket
     server.listen(process.env.PORT, () => {
       console.log(`Servidor rodando na porta ${process.env.PORT}`);
     });
   })
-  .catch((err) => console.error(err));
+  .catch(err => console.error(err));
